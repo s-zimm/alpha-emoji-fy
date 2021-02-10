@@ -7,14 +7,23 @@ const app = express();
 const port = 3210;
 
 app.use(bodyParser.urlencoded({ extended: true }));
-// THIS IS BAD CHANGE THIS
-let message_ts;
-let channel;
+
+const reactionsByUserAndChannelCache = {};
+
 app.post('/emojify', async (req, res) => {
     const parsed = JSON.parse(req.body.payload);
+    const userId = parsed.user.id;
+    
+    !reactionsByUserAndChannelCache[userId] && (reactionsByUserAndChannelCache[userId] = {
+        "latestReaction": {
+            "message_ts": "",
+            "channel": ""
+        }
+    });
+    
     if (parsed.type === 'message_action') {
-        message_ts = parsed.message_ts;
-        channel = parsed.channel.id;
+        reactionsByUserAndChannelCache[userId]["latestReaction"]["message_ts"] = parsed.message_ts;
+        reactionsByUserAndChannelCache[userId]["latestReaction"]["channel"] = parsed.channel.id;
         const body = {
             "trigger_id": parsed.trigger_id,
             "view": {
@@ -83,8 +92,8 @@ app.post('/emojify', async (req, res) => {
         }
         const executeIfIncomplete = async (i = 0) => {
             const body = {
-                channel: channel,
-                timestamp: message_ts
+                channel: reactionsByUserAndChannelCache[userId]["latestReaction"]["channel"],
+                timestamp: reactionsByUserAndChannelCache[userId]["latestReaction"]["message_ts"]
             }
             if (numberOfLettersMapping[letters[i]] === 2) {
                 body.name = `alphabet-yellow-${letters[i]}`;
@@ -100,6 +109,8 @@ app.post('/emojify', async (req, res) => {
             });
             if (letters.length - 1 > i) {
                 executeIfIncomplete(i + 1);
+            } else {
+                delete reactionsByUserAndChannelCache[userId];
             }
         }
         executeIfIncomplete();
